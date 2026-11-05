@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Director — 5s demo</title>
+<style>
+  :root{
+    --cream:#f3ead8; --ink:#17151f; --red:#e0443c;
+    --yellow:#ffd23f; --blue:#2d4a8a; --teal:#2ec4b6;
+  }
+  html,body{margin:0;height:100%;background:#0b0b0f;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;width:1080px;height:1920px;transform-origin:0 0;background:#0b0b0f}
+  canvas{display:block;width:1080px;height:1920px}
+  #caption{position:absolute;left:0;right:0;bottom:18.5%;display:flex;justify-content:center;pointer-events:none;opacity:0}
+  #cap{
+    display:inline-block;max-width:860px;text-align:center;text-transform:uppercase;
+    font:900 62px/1.06 "Arial Black","DejaVu Sans",Arial,sans-serif;letter-spacing:.005em;
+    color:#fff;background:#17151f;border:3px solid rgba(255,255,255,.14);
+    border-radius:16px;padding:14px 28px 18px;box-shadow:9px 9px 0 rgba(224,68,60,.92)
+  }
+  #cap b{color:var(--yellow);font-weight:900}
+  #ui{position:fixed;top:max(10px,env(safe-area-inset-top,0px));left:0;right:0;display:flex;justify-content:center;gap:8px;z-index:5}
+  #ui button{background:rgba(255,255,255,.9);color:#17151f;border:0;border-radius:20px;padding:8px 16px;font:700 14px Arial,sans-serif;cursor:pointer}
+  #ui button:disabled{opacity:.4}
+  #tm{color:#fff;font:13px Arial,sans-serif;align-self:center;opacity:.8;min-width:64px}
+  body.clean #ui{display:none}
+</style>
+</head>
+<body>
+<div id="ui"><button id="bp">Play</button><button id="bz">Pause</button><button id="br">Restart</button><span id="tm">0.0 / 5s</span></div>
+<div id="stage"><canvas id="c" width="1080" height="1920"></canvas><div id="caption"><span id="cap"></span></div></div>
+<audio id="aud" src="tone.m4a" preload="auto"></audio>
+<script>
+const W=1080,H=1920,FPS=24,DUR=5;
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const stage=document.getElementById('stage'),capWrap=document.getElementById('caption'),cap=document.getElementById('cap');
+const aud=document.getElementById('aud');
+const CREAM='#f3ead8',INK='#17151f',RED='#e0443c',YELLOW='#ffd23f',BLUE='#2d4a8a',TEAL='#2ec4b6';
+let T=0,playing=false,last=0,acc=0,capKey='';
+
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,k)=>a+(b-a)*k;
+const smooth=k=>{k=clamp(k);return k*k*(3-2*k)};
+const back=k=>{k=clamp(k);const s=1.70158;return 1+(s+1)*Math.pow(k-1,3)+s*Math.pow(k-1,2)};
+
+/* deterministic grain tile */
+const noise=document.createElement('canvas');noise.width=270;noise.height=480;
+{
+  const n=noise.getContext('2d'),img=n.createImageData(noise.width,noise.height);
+  let seed=0x9e3779b9;
+  for(let i=0;i<img.data.length;i+=4){
+    seed=(seed*1664525+1013904223)>>>0;
+    const v=(seed>>>24)&255;
+    img.data[i]=img.data[i+1]=img.data[i+2]=v;img.data[i+3]=255;
+  }
+  n.putImageData(img,0,0);
+}
+
+function text(s,x,y,size,color,weight='900',align='left'){
+  ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline='middle';
+  ctx.font=`${weight} ${size}px "Arial Black","DejaVu Sans",Arial,sans-serif`;
+  ctx.fillText(s,x,y);
+}
+function bar(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(x,y,w,h)}
+function ring(x,y,r,color,lw){ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.stroke()}
+function circle(x,y,r,color){ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill()}
+function line(x1,y1,x2,y2,color,lw){ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()}
+
+function grid(color,step){
+  ctx.strokeStyle=color;ctx.lineWidth=2;
+  for(let x=-1200;x<W+1200;x+=step){ctx.beginPath();ctx.moveTo(x,-1200);ctx.lineTo(x,H+1200);ctx.stroke()}
+  for(let y=-1200;y<H+1200;y+=step){ctx.beginPath();ctx.moveTo(-1200,y);ctx.lineTo(W+1200,y);ctx.stroke()}
+}
+
+function act1(t){
+  bar(-1200,-1200,W+2400,H+2400,CREAM);
+  grid('rgba(23,21,31,.075)',90);
+
+  const pop=back(clamp((t-.06)/.55));
+  circle(824,548,190*pop,RED);
+  bar(100,318,880,12,INK);
+  bar(884,210,96,96,YELLOW);
+  text('001',932,258,36,INK,'900','center');
+
+  text('A FILM ABOUT MOTION',102,268,30,INK,'700');
+  text('NOT',94,758,236,INK);
+  text('SLIDES',94,1002,236,INK);
+  bar(94,1092,560,22,RED);
+  line(760,1178,990,1266,BLUE,16);
+
+  text('SCENE 01 / PAPER',102,1310,24,'rgba(23,21,31,.62)','700');
+  text('NO FADES. NO SECTION TAGS.',102,1350,24,'rgba(23,21,31,.62)','700');
+}
+
+function act2(t){
+  bar(-1200,-1200,W+2400,H+2400,INK);
+  grid('rgba(243,234,216,.055)',90);
+
+  ring(812,650,235,'rgba(46,196,182,.9)',10);
+  circle(880,1510,205,RED);
+  bar(94,1210,900,8,'rgba(243,234,216,.55)');
+
+  text('ONE',94,700,238,CREAM);
+  text('TIMELINE',94,942,144,YELLOW);
+  text('EVERY FRAME HAS A TIME.',98,1040,28,'rgba(243,234,216,.7)','700');
+
+  /* ruler + playhead */
+  const p=clamp((t-2.15)/2.8);
+  ctx.strokeStyle='rgba(243,234,216,.55)';ctx.lineWidth=3;
+  for(let i=0;i<=20;i++){
+    const x=94+i*(900/20);
+    const h=i%5===0?26:13;
+    ctx.beginPath();ctx.moveTo(x,1210);ctx.lineTo(x,1210+h);ctx.stroke();
+  }
+  const px=94+p*900;
+  line(px,1150,px,1290,RED,6);
+  ctx.fillStyle=RED;ctx.beginPath();ctx.moveTo(px-18,1142);ctx.lineTo(px+18,1142);ctx.lineTo(px,1172);ctx.closePath();ctx.fill();
+  text(String(Math.floor(p*5)).padStart(2,'0'),px,1122,26,RED,'900','center');
+
+  /* fps stamp */
+  ctx.save();ctx.translate(806,430);ctx.rotate(-.09);
+  ctx.strokeStyle=CREAM;ctx.lineWidth=5;ctx.strokeRect(-112,-54,224,108);
+  text('24 FPS',0,-8,40,CREAM,'900','center');
+  text('1080 × 1920',0,34,20,CREAM,'700','center');
+  ctx.restore();
+}
+
+function slate(t){
+  const light=t<2.2?INK:CREAM;
+  text('DIRECTOR / DEMO 001',48,64,22,light,'700');
+  const sec=Math.floor(t),fr=Math.floor((t-sec)*FPS);
+  text(`00:0${sec}:${String(fr).padStart(2,'0')}`,1032,64,22,light,'700','right');
+}
+
+function overlays(t){
+  // red wipe at the cut
+  const p=clamp((t-2.1)/.28);
+  if(p>0&&p<1){bar(lerp(-380,W+380,p)-180,-120,360,H+240,RED)}
+
+  // fade in/out
+  const fin=1-clamp(t/.32), fout=clamp((t-4.7)/.3);
+  const fade=Math.max(fin,fout);
+  if(fade>0){ctx.fillStyle=`rgba(11,11,15,${fade})`;ctx.fillRect(0,0,W,H)}
+
+  // grain
+  ctx.save();ctx.globalAlpha=.055;ctx.globalCompositeOperation='overlay';
+  ctx.imageSmoothingEnabled=false;ctx.drawImage(noise,0,0,W,H);ctx.restore();ctx.imageSmoothingEnabled=true;
+
+  slate(t);
+}
+
+function captions(t){
+  let s='',k='';
+  if(t>=.45&&t<2.02){s='NOT SLIDES.';k='SLIDES.'}
+  else if(t>=2.34&&t<3.82){s='ONE TIMELINE.';k='TIMELINE.'}
+  else if(t>=4.02&&t<4.86){s='FRAME BY FRAME.';k='FRAME'}
+  if(!s){capWrap.style.opacity=0;capKey='';return}
+  const key=s+'|'+k;
+  if(key!==capKey){
+    capKey=key;
+    cap.innerHTML=s.replace(k,`<b>${k}</b>`);
+  }
+  capWrap.style.opacity=1;
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  const t=clamp(T,0,DUR);
+  const k=smooth(t/DUR);
+  const s=1.02+.10*k;
+  const x=Math.sin(t*.7)*10;
+  const y=lerp(0,-34,k);
+  const r=lerp(-.008,.012,k);
+
+  ctx.save();
+  ctx.translate(W/2,H/2);ctx.rotate(r);ctx.scale(s,s);ctx.translate(-W/2-x,-H/2-y);
+  t<2.2?act1(t):act2(t);
+  ctx.restore();
+
+  overlays(t);
+  captions(t);
+  document.getElementById('tm').textContent=`${t.toFixed(1)} / ${DUR}s`;
+}
+
+/* playback */
+const bp=document.getElementById('bp'),bz=document.getElementById('bz'),br=document.getElementById('br');
+function setBtn(){bp.textContent=T>=DUR?'Play again':'Play'}
+function play(){
+  if(T>=DUR)T=0;
+  playing=true;acc=0;last=performance.now();
+  if(aud){aud.currentTime=T;aud.play().catch(()=>{})}
+  setBtn();
+}
+function pause(){playing=false;if(aud)aud.pause()}
+bp.onclick=play;bz.onclick=pause;
+br.onclick=()=>{T=0;render();play()};
+c.onclick=()=>playing?pause():play();
+
+function loop(now){
+  requestAnimationFrame(loop);
+  if(!playing){last=now;return}
+  acc+=now-last;last=now;
+  const step=1000/FPS;
+  if(acc>=step){
+    const n=Math.floor(acc/step);acc-=n*step;
+    T=Math.min(DUR,T+n/FPS);
+    render();
+    if(aud&&Math.abs(aud.currentTime-T)>.22)aud.currentTime=T;
+    if(T>=DUR){playing=false;if(aud)aud.pause();setBtn()}
+  }
+}
+
+/* deterministic seek hook */
+window.DUR=DUR;window.FPS=FPS;
+window.__seek=t=>{T=clamp(Number(t)||0,0,DUR);render()};
+
+/* fit the stage to the window */
+function fit(){
+  const s=Math.min(innerWidth/W,innerHeight/H);
+  stage.style.transform=`translate(${(innerWidth-W*s)/2}px,${(innerHeight-H*s)/2}px) scale(${s})`;
+}
+addEventListener('resize',fit);fit();
+
+/* query flags */
+const qp=new URLSearchParams(location.search);
+if(qp.has('clean'))document.body.classList.add('clean');
+if(qp.has('seek'))window.__seek(qp.get('seek'));
+
+document.fonts.ready.then(()=>{render();setBtn()});
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

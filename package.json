@@ -1,0 +1,17 @@
+{
+  "name": "director-skill",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end AI agent skill for HTML motion videos: script, audio, deterministic timeline, frame-perfect MP4, QA.",
+  "license": "MIT",
+  "author": "Francesa de nayra",
+  "homepage": "https://github.com/alwaysResa/director-skill",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node tests/smoke.mjs",
+    "demo": "bash scripts/make-demo.sh"
+  }
+}

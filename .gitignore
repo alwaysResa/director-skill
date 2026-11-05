@@ -1,0 +1,20 @@
+node_modules/
+tests/.tmp/
+render/
+frames/
+review/
+*.log
+.DS_Store
+Thumbs.db
+
+# Keep the small README demo, ignore accidental large renders.
+*.mp4
+!docs/demo.mp4
+*.mov
+*.webm
+*.wav
+*.m4a
+!assets/demo/tone.m4a
+
+__pycache__/
+*.pyc

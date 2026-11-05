@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Director starter — replace me</title>
+<style>
+  :root{
+    --paper:#f3ead8; --ink:#17151f; --red:#e0443c;
+    --yellow:#ffd23f; --blue:#2d4a8a; --teal:#2ec4b6;
+  }
+  html,body{margin:0;height:100%;background:#0b0b0f;overflow:hidden}
+  #stage{position:absolute;left:0;top:0;width:1080px;height:1920px;transform-origin:0 0;background:#0b0b0f}
+  canvas{display:block;width:1080px;height:1920px}
+  #caption{position:absolute;left:0;right:0;bottom:18.5%;display:flex;justify-content:center;pointer-events:none;opacity:0}
+  #cap{
+    display:inline-block;max-width:860px;text-align:center;text-transform:uppercase;
+    font:900 60px/1.06 "Arial Black","DejaVu Sans",Arial,sans-serif;
+    color:#fff;background:#17151f;border:3px solid rgba(255,255,255,.14);
+    border-radius:16px;padding:14px 28px 18px;box-shadow:9px 9px 0 rgba(224,68,60,.92)
+  }
+  #cap b{color:var(--yellow)}
+  #ui{position:fixed;top:max(10px,env(safe-area-inset-top,0px));left:0;right:0;display:flex;justify-content:center;gap:8px;z-index:5}
+  #ui button{background:rgba(255,255,255,.9);color:#17151f;border:0;border-radius:20px;padding:8px 16px;font:700 14px Arial,sans-serif;cursor:pointer}
+  #ui button:disabled{opacity:.4}
+  #tm{color:#fff;font:13px Arial,sans-serif;align-self:center;opacity:.8;min-width:64px}
+  body.clean #ui{display:none}
+</style>
+</head>
+<body>
+<div id="ui"><button id="bp">Play</button><button id="bz">Pause</button><button id="br">Restart</button><span id="tm">0.0 / 6s</span></div>
+<div id="stage"><canvas id="c" width="1080" height="1920"></canvas><div id="caption"><span id="cap"></span></div></div>
+<!-- Put your VO + SFX mix here. The renderer never plays it; it is muxed later. -->
+<audio id="aud" src="voice.m4a" preload="auto"></audio>
+<script>
+/* ============================================================
+   DIRECTOR STARTER
+   1. Replace the copy in SCENE 1 / SCENE 2.
+   2. Replace the palette and type.
+   3. Put your audio at voice.m4a (or change the <audio> src).
+   4. Keep every animation driven by T, and keep window.__seek(t).
+   5. Render: node scripts/render-frames.mjs --url "file://.../index.html" ...
+   ============================================================ */
+
+const W=1080,H=1920,FPS=24,DUR=6;
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const stage=document.getElementById('stage'),capWrap=document.getElementById('caption'),cap=document.getElementById('cap');
+const aud=document.getElementById('aud');
+const PAPER='#f3ead8',INK='#17151f',RED='#e0443c',YELLOW='#ffd23f',BLUE='#2d4a8a',TEAL='#2ec4b6';
+let T=0,playing=false,last=0,acc=0,capKey='';
+
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,k)=>a+(b-a)*k;
+const smooth=k=>{k=clamp(k);return k*k*(3-2*k)};
+
+/* deterministic grain: same tile every frame, no shimmer */
+const noise=document.createElement('canvas');noise.width=270;noise.height=480;
+{
+  const n=noise.getContext('2d'),img=n.createImageData(noise.width,noise.height);
+  let seed=0x12345678;
+  for(let i=0;i<img.data.length;i+=4){
+    seed=(seed*1664525+1013904223)>>>0;
+    const v=(seed>>>24)&255;
+    img.data[i]=img.data[i+1]=img.data[i+2]=v;img.data[i+3]=255;
+  }
+  n.putImageData(img,0,0);
+}
+
+function text(s,x,y,size,color,weight='900',align='left'){
+  ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline='middle';
+  ctx.font=`${weight} ${size}px "Arial Black","DejaVu Sans",Arial,sans-serif`;
+  ctx.fillText(s,x,y);
+}
+function bar(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(x,y,w,h)}
+function circle(x,y,r,color){ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill()}
+function ring(x,y,r,color,lw){ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.stroke()}
+function line(x1,y1,x2,y2,color,lw){ctx.strokeStyle=color;ctx.lineWidth=lw;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()}
+function grid(color,step){
+  ctx.strokeStyle=color;ctx.lineWidth=2;
+  for(let x=-1200;x<W+1200;x+=step){ctx.beginPath();ctx.moveTo(x,-1200);ctx.lineTo(x,H+1200);ctx.stroke()}
+  for(let y=-1200;y<H+1200;y+=step){ctx.beginPath();ctx.moveTo(-1200,y);ctx.lineTo(W+1200,y);ctx.stroke()}
+}
+
+/* ---------- SCENE 1 (0 - 2.6s) ---------- */
+function scene1(t){
+  bar(-1200,-1200,W+2400,H+2400,PAPER);
+  grid('rgba(23,21,31,.07)',90);
+
+  circle(820,560,185,RED);
+  bar(98,318,880,12,INK);
+  text('A SHORT FILM ABOUT',100,270,30,INK,'700');
+
+  text('YOUR',94,760,238,INK);
+  text('STORY.',94,1004,238,INK);
+  bar(94,1092,520,22,RED);
+  line(760,1180,980,1264,BLUE,16);
+
+  text('SCENE 01 / REPLACE THIS',102,1310,24,'rgba(23,21,31,.6)','700');
+}
+
+/* ---------- SCENE 2 (2.6 - 6s) ---------- */
+function scene2(t){
+  bar(-1200,-1200,W+2400,H+2400,INK);
+  grid('rgba(243,234,216,.055)',90);
+
+  ring(806,650,232,TEAL,10);
+  circle(878,1500,200,RED);
+  bar(94,1210,900,8,'rgba(243,234,216,.55)');
+
+  text('MAKE',94,700,238,PAPER);
+  text('IT MOVE',94,942,150,YELLOW);
+  text('A CUT IS NOT A TRANSITION.',98,1040,28,'rgba(243,234,216,.7)','700');
+
+  const p=clamp((t-2.6)/3.4);
+  for(let i=0;i<=20;i++){
+    const x=94+i*(900/20);
+    const h=i%5===0?26:13;
+    line(x,1210,x,1210+h,'rgba(243,234,216,.55)',3);
+  }
+  const px=94+p*900;
+  line(px,1150,px,1290,RED,6);
+  ctx.fillStyle=RED;ctx.beginPath();ctx.moveTo(px-18,1142);ctx.lineTo(px+18,1142);ctx.lineTo(px,1172);ctx.closePath();ctx.fill();
+  text(String(Math.floor(p*6)).padStart(2,'0'),px,1122,26,RED,'900','center');
+}
+
+/* ---------- CAMERA + POST ---------- */
+function render(){
+  ctx.clearRect(0,0,W,H);
+  const t=clamp(T,0,DUR);
+  const k=smooth(t/DUR);
+  const s=1.02+.09*k;
+  const x=Math.sin(t*.7)*9;
+  const y=lerp(0,-28,k);
+
+  ctx.save();
+  ctx.translate(W/2,H/2);ctx.rotate(lerp(-.006,.01,k));ctx.scale(s,s);ctx.translate(-W/2-x,-H/2-y);
+  t<2.6?scene1(t):scene2(t);
+  ctx.restore();
+
+  /* red wipe at the scene cut */
+  const p=clamp((t-2.52)/.22);
+  if(p>0&&p<1){bar(lerp(-360,W+360,p)-170,-120,340,H+240,RED)}
+
+  /* fade in / out */
+  const fade=Math.max(1-clamp(t/.3),clamp((t-5.7)/.3));
+  if(fade>0){ctx.fillStyle=`rgba(11,11,15,${fade})`;ctx.fillRect(0,0,W,H)}
+
+  /* grain + slate */
+  ctx.save();ctx.globalAlpha=.05;ctx.globalCompositeOperation='overlay';
+  ctx.imageSmoothingEnabled=false;ctx.drawImage(noise,0,0,W,H);ctx.restore();ctx.imageSmoothingEnabled=true;
+  const light=t<2.6?INK:PAPER;
+  text('DIRECTOR / STARTER',48,64,22,light,'700');
+  text('00:0'+Math.floor(t)+':'+String(Math.floor((t%1)*FPS)).padStart(2,'0'),1032,64,22,light,'700','right');
+
+  captions(t);
+  document.getElementById('tm').textContent=`${t.toFixed(1)} / ${DUR}s`;
+}
+
+/* ---------- CAPTIONS: one line, keyword highlight ---------- */
+function captions(t){
+  let s='',k='';
+  if(t>=.35&&t<2.35){s='START WITH A HOOK.';k='HOOK.'}
+  else if(t>=2.75&&t<4.45){s='THEN MAKE IT MOVE.';k='MOVE.'}
+  else if(t>=4.65&&t<5.75){s='END WITH A REASON.';k='REASON.'}
+
+  if(!s){capWrap.style.opacity=0;capKey='';return}
+  const key=s+'|'+k;
+  if(key!==capKey){capKey=key;cap.innerHTML=s.replace(k,`<b>${k}</b>`)}
+  capWrap.style.opacity=1;
+}
+
+/* ---------- PLAYBACK ---------- */
+const bp=document.getElementById('bp'),bz=document.getElementById('bz'),br=document.getElementById('br');
+function setBtn(){bp.textContent=T>=DUR?'Play again':'Play'}
+function play(){
+  if(T>=DUR)T=0;
+  playing=true;acc=0;last=performance.now();
+  if(aud){aud.currentTime=T;aud.play().catch(()=>{})}
+  setBtn();
+}
+function pause(){playing=false;if(aud)aud.pause()}
+bp.onclick=play;bz.onclick=pause;br.onclick=()=>{T=0;render();play()};
+c.onclick=()=>playing?pause():play();
+
+function loop(now){
+  requestAnimationFrame(loop);
+  if(!playing){last=now;return}
+  acc+=now-last;last=now;
+  const step=1000/FPS;
+  if(acc>=step){
+    const n=Math.floor(acc/step);acc-=n*step;
+    T=Math.min(DUR,T+n/FPS);
+    render();
+    if(aud&&Math.abs(aud.currentTime-T)>.22)aud.currentTime=T;
+    if(T>=DUR){playing=false;if(aud)aud.pause();setBtn()}
+  }
+}
+
+/* ---------- DETERMINISTIC CONTRACT (do not remove) ---------- */
+window.DUR=DUR;window.FPS=FPS;
+window.__seek=t=>{T=clamp(Number(t)||0,0,DUR);render()};
+
+/* ---------- FIT + QUERY FLAGS ---------- */
+function fit(){
+  const s=Math.min(innerWidth/W,innerHeight/H);
+  stage.style.transform=`translate(${(innerWidth-W*s)/2}px,${(innerHeight-H*s)/2}px) scale(${s})`;
+}
+addEventListener('resize',fit);fit();
+const qp=new URLSearchParams(location.search);
+if(qp.has('clean'))document.body.classList.add('clean');
+if(qp.has('seek'))window.__seek(qp.get('seek'));
+document.fonts.ready.then(()=>{render();setBtn()});
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
